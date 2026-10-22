@@ -28,6 +28,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import edu.uestc.checkin.model.CheckinConfig
 import edu.uestc.checkin.model.LocationPreset
 import edu.uestc.checkin.model.LocationPresets
@@ -234,8 +235,11 @@ class MainActivity : Activity() {
         fingerprint = field(
             card, "浏览器指纹", "MULTIFACTOR_BROWSER_FINGERPRINT 的值",
             secret = true,
-            helper = "只复制 Cookie 的值，不要填整段 Cookie 或 SESSION。"
+            helper = "只复制 Cookie 的值，不要填整段 Cookie 或 SESSION。也可点下方“自动获取”。"
         )
+        card.addView(linkText("自动获取：在应用内登录一次") {
+            startActivityForResult(Intent(this, FingerprintCaptureActivity::class.java), REQUEST_FINGERPRINT)
+        }, matchWrap(bottom = 4))
     }
 
     private fun buildLocationCard(root: LinearLayout) {
@@ -425,6 +429,7 @@ class MainActivity : Activity() {
                ⑤ 找到 MULTIFACTOR_BROWSER_FINGERPRINT，只复制该行的“值 / Value”；
                ⑥ 回到手机粘贴到“浏览器指纹”，不要填整段 Cookie，也不要填 SESSION。
                注意：列表里没有 IDAS 域时重新打开登录入口再看；没有这个 Cookie 就先完成学校要求的可信设备验证。换手机或清除浏览器数据后需要重新获取，不要使用同学的指纹。
+               也可以点“浏览器指纹”下方的“自动获取”，在应用内登录一次，程序会自动填入。
             3. 在“账号与验证”里填账号、密码和上一步复制的指纹。
             4. 在“打卡位置”点“欣苑”或“校内”，坐标和地址会自动填好；都不是你的位置时展开“自定义坐标”手填。
             5. 在“打卡时间”确认时间在 ${CheckinConfig.WINDOW_LABEL} 之间，可点“选择时间”。
@@ -782,6 +787,15 @@ class MainActivity : Activity() {
         refreshStatus()
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_FINGERPRINT || resultCode != RESULT_OK) return
+        val value = data?.getStringExtra(FingerprintCaptureActivity.EXTRA_FINGERPRINT).orEmpty().trim()
+        if (value.isEmpty()) return
+        fingerprint.setText(value)
+        Toast.makeText(this, "已填入浏览器指纹，请点“保存加密配置”", Toast.LENGTH_LONG).show()
+    }
+
     private fun refreshStatus() {
         val recent = RunLogStore(this).recent().firstOrNull()
         val schedule = DailyScheduler(this).currentStatus()
@@ -793,6 +807,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val REQUEST_FINGERPRINT = 1001
         private val DISPLAY_TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm")
     }
 }

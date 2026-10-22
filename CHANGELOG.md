@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- “自动获取浏览器指纹”：在应用内打开 IDAS 登录页，登录成功进入打卡站点后自动读取 `MULTIFACTOR_BROWSER_FINGERPRINT` 并填入配置。
+
 ### Changed
 
 - 常见问题新增“每晚收到群发‘未打卡’提醒但应用显示成功”的处理说明。

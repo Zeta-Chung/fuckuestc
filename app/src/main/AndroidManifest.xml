@@ -14,6 +14,7 @@
         android:label="打卡助手"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".ui.LoginProbeActivity" android:exported="false" />
+        <activity android:name=".ui.FingerprintCaptureActivity" android:exported="false" />
         <activity android:name=".ui.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

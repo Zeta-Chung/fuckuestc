@@ -29,7 +29,7 @@
 #### 需准备的信息
 
 1. **账号和密码**：使用平时登录学校统一身份认证（IDAS）的本人账号与密码。忘记密码时走学校正式找回流程，不使用他人的账号。
-2. **浏览器指纹**：在电脑 Chrome 或 Edge 中用本人账号打开 `https://jzsz.uestc.edu.cn`。出现 IDAS 登录页（地址栏显示 `idas.uestc.edu.cn`）时按 `F12`，保持开发者工具打开，按学校页面提示完成登录和人工验证。随后在开发者工具中依次打开 **Application（应用/应用程序）→ Storage（存储）→ Cookies → `https://idas.uestc.edu.cn`**，查找 `MULTIFACTOR_BROWSER_FINGERPRINT`，只复制该行的 **Value（值）**。列表中没有 IDAS 域时可重新打开登录入口并在 IDAS 页面查看；没有该 Cookie 时先完成本人浏览器上的正式可信设备验证。不要填写他人的指纹或猜测一个值。
+2. **浏览器指纹**：在电脑 Chrome 或 Edge 中用本人账号打开 `https://jzsz.uestc.edu.cn`。出现 IDAS 登录页（地址栏显示 `idas.uestc.edu.cn`）时按 `F12`，保持开发者工具打开，按学校页面提示完成登录和人工验证。随后在开发者工具中依次打开 **Application（应用/应用程序）→ Storage（存储）→ Cookies → `https://idas.uestc.edu.cn`**，查找 `MULTIFACTOR_BROWSER_FINGERPRINT`，只复制该行的 **Value（值）**。列表中没有 IDAS 域时可重新打开登录入口并在 IDAS 页面查看；没有该 Cookie 时先完成本人浏览器上的正式可信设备验证。不要填写他人的指纹或猜测一个值。也可以点应用内“浏览器指纹”下方的“自动获取”，在应用内登录一次后自动填入。
 3. **经纬度和地址**：登录 JZSZ 后打开打卡页面，按 `F12` 打开 **Network（网络）**，刷新页面，搜索 `available-locations`。点开 `/daily-checkin/api/checkin-location/available-locations`，在 **Response（响应）** 中找到允许位置的 `latitude`、`longitude` 与 `radiusMeter`。从本人可使用的位置中选一个，`latitude` 填“纬度”、`longitude` 填“经度”。坐标系按接口使用 GCJ-02。需要地址时，在同一已登录浏览器访问 `https://jzsz.uestc.edu.cn/daily-checkin/api/map/reverse?lat=纬度数字&lng=经度数字`，复制响应 `data` 中的地址；接口无结果时以打卡页面显示的地址为准。
 4. **打卡时间**：先看学校打卡页面显示的当日时段。页面未写明时，在 **Network** 中搜索 `checkin-schedule/effective`，查看响应 `data` 中的 `studentCheckinStartOffsetMinute` 与 `studentCheckinEndOffsetMinute`。这两个数是当天 00:00 起的分钟数，除以 60 得小时、余数为分钟；例如 `1380` 是 `23:00`。在允许时段内选一个 `HH:mm` 填写，本应用只接受 `21:00`–`23:30`。预填的 `22:00` 只是默认值，不是学校指定时间。
 5. **User-Agent 与其余参数**：`User-Agent` 默认填入当前设备 WebView 的值，通常直接保留；`accuracy`、`locationDurationMs`、`networkTypeCode`、`locationEnabled` 等已有预填值，若本人正常打卡请求有明确要求再调整。标有“可留空”的输入框可以不填。拿不到必填信息时先不要提交打卡。
