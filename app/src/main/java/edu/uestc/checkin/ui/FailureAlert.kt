@@ -106,7 +106,7 @@ object FailureAlert {
     }
 
     private fun explain(reasonCode: String): String = when (reasonCode) {
-        "NEEDS_HUMAN" -> "登录需要人工验证"
+        "NEEDS_HUMAN" -> "登录需要人工验证，可点“自动获取”重新抓取本机指纹后重试"
         "SESSION_MISSING", "JZSZ_SESSION_MISSING" -> "登录后未取得打卡会话"
         "TODAY_UNKNOWN" -> "无法确认当天打卡状态"
         "SCHEDULE_UNKNOWN" -> "无法确认打卡时间范围"
