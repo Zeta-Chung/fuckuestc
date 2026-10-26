@@ -27,6 +27,7 @@ for path in (VENDOR, BASE_DIR):
 APP_ID = "wxaa78bf2905f01cee"  # 目标小程序 AppID（晚安成电 / 成电智慧学工）
 MINT_URL = "https://jzsz.uestc.edu.cn/platform-app/api/auth/checkin-ticket"
 CREDS_FILE = BASE_DIR / "wx-credentials.json"
+CREDS_SEALED = BASE_DIR / "wx-credentials.json.dpapi"
 TICKET_FILE = BASE_DIR / "ticket.json"
 QR_FILE = BASE_DIR / "wx-qr.png"
 
@@ -36,20 +37,37 @@ def log(message: str) -> None:
 
 
 def load_creds():
+    import dpapi
     from moon_uestc import WeChatCredentials
 
-    data = json.loads(CREDS_FILE.read_text(encoding="utf-8"))
-    return WeChatCredentials.model_validate(data)
+    if CREDS_SEALED.exists():
+        raw = dpapi.unprotect(CREDS_SEALED.read_bytes())
+        source = "DPAPI 加密文件"
+    elif CREDS_FILE.exists():
+        raw = CREDS_FILE.read_bytes()
+        source = "明文文件（建议改用加密）"
+    else:
+        raise FileNotFoundError("没有微信授权凭据")
+    log(f"读取凭据：{source}")
+    return WeChatCredentials.model_validate(json.loads(raw.decode("utf-8")))
 
 
 def save_creds(credentials) -> None:
+    import dpapi
+
     payload = {
         "openid": credentials.openid.get_secret_value(),
         "access_token": credentials.access_token.get_secret_value(),
         "refresh_token": credentials.refresh_token.get_secret_value(),
         "expires_at": credentials.expires_at,
     }
-    CREDS_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    sealed = dpapi.protect(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+    tmp = CREDS_SEALED.with_suffix(".dpapi.tmp")
+    tmp.write_bytes(sealed)
+    tmp.replace(CREDS_SEALED)
+    if CREDS_FILE.exists():
+        CREDS_FILE.unlink()
+        log("已删除明文凭据文件，只保留 DPAPI 加密副本")
 
 
 def ticket_meta() -> dict:
@@ -91,10 +109,14 @@ def current_creds(wechat):
     return credentials
 
 
+def creds_available() -> bool:
+    return CREDS_SEALED.exists() or CREDS_FILE.exists()
+
+
 def cmd_refresh() -> int:
     from moon_uestc import WeChatClient
 
-    if not CREDS_FILE.exists():
+    if not creds_available():
         log("没有微信授权凭据，先运行 --qr")
         return 1
     with WeChatClient() as wechat:
@@ -105,8 +127,18 @@ def cmd_refresh() -> int:
     return 0
 
 
+def cmd_seal() -> int:
+    """把已有凭据就地转成 DPAPI 加密副本（明文自动删除）。"""
+    if not creds_available():
+        log("没有微信授权凭据，先运行 --qr")
+        return 1
+    save_creds(load_creds())
+    log(f"凭据已加密为 {CREDS_SEALED.name}（只有当前 Windows 账户能解）")
+    return 0
+
+
 def cmd_status() -> int:
-    if not CREDS_FILE.exists():
+    if not creds_available():
         log("还没有微信授权凭据，先运行 --qr 扫码")
         return 1
     credentials = load_creds()
@@ -156,7 +188,7 @@ def cmd_qr(open_image: bool) -> int:
 def cmd_mint() -> int:
     from moon_uestc import MoonClient, WeChatClient
 
-    if not CREDS_FILE.exists():
+    if not creds_available():
         log("没有微信授权凭据，先运行 --qr")
         return 1
 
@@ -197,6 +229,7 @@ def main() -> int:
     group.add_argument("--mint", action="store_true", help="取一张新票写入 ticket.json")
     group.add_argument("--status", action="store_true", help="查看凭据状态")
     group.add_argument("--refresh", action="store_true", help="强制刷新一次微信凭据")
+    group.add_argument("--seal", action="store_true", help="把凭据转为 DPAPI 加密并删除明文")
     parser.add_argument("--no-open", action="store_true", help="--qr 时不自动打开图片")
     args = parser.parse_args()
 
@@ -206,6 +239,8 @@ def main() -> int:
         return cmd_mint()
     if args.refresh:
         return cmd_refresh()
+    if args.seal:
+        return cmd_seal()
     return cmd_status()
 
 

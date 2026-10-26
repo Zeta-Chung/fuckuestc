@@ -18,18 +18,21 @@
 ```powershell
 python wx_ticket.py --qr       # 首次/凭据失效时：生成 wx-qr.png 并等扫码（5 分钟有效）
 python wx_ticket.py --mint     # 取一张新票写入 ticket.json（nightly 会自动调用）
+python wx_ticket.py --refresh  # 强制刷新一次凭据（提前验证续期链路）
 python wx_ticket.py --status   # 查看凭据剩余时间
+python wx_ticket.py --seal     # 把明文凭据转成 DPAPI 加密副本
 ```
 
 | 文件 | 用途 |
 | --- | --- |
 | `wx_ticket.py` | 换票主程序：扫码授权 → 刷新凭据 → 取 code → 换票 → 原子写 `ticket.json` |
-| `wx-credentials.json` | 微信授权凭据（refresh_token 等），**等同密码，已 gitignore** |
+| `dpapi.py` | Windows DPAPI 封装：用当前账户凭据加解密，只依赖标准库 `ctypes` |
+| `wx-credentials.json.dpapi` | 微信授权凭据的 **DPAPI 密文**（只有当前 Windows 账户能解），已 gitignore |
 | `vendor/site/` | `moon-uestc` 及其依赖（`httpx2`/`httpcore2`/`truststore`…），已 gitignore |
 
+- 凭据默认以 DPAPI 加密保存：拷到别的机器或别的 Windows 账户下无法解密，程序会报「没有微信授权凭据」并退回兜底路径。
 - `nightly.ps1` 默认 `-TicketSource wx`：先自动换票，失败才退回旧的「人工打开打卡页」兜底。
-- 凭据过期（约 2 小时 refresh 一次；refresh_token 失效或需要重新授权时）→ `--mint` 报错，
-  当天退回兜底路径；此时重跑 `--qr` 扫一次码即可。
+- 凭据约 2 小时过期，`--mint` 会自动 refresh；refresh_token 失效或微信拒绝时需重跑 `--qr` 扫一次码。
 - 票据只有约 5 分钟有效期，所以 nightly 是「先换票、立刻提交」，不做提前缓存。
 
 > **2026-10-24 实测结论（重要）**：微信小程序运行时（WMPF）**不走系统代理/PAC**，mitmproxy 的普通代理模式抓不到它任何请求。

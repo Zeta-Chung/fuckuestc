@@ -178,7 +178,7 @@ tools/pc-relay/  PC 票据中继：取票、提交、每晚自动编排与计划
 
 - 初始协议字段参考公开的 [UESTC-MoonCheck PC 实现](https://github.com/richard297779/UESTC-MoonCheck/tree/main/dev/tools/pc_reference) 及[接口文档](https://github.com/richard297779/UESTC-MoonCheck/blob/main/dev/docs/api-contract.md)。它们属于第三方观察，目标环境中的脱敏响应才是最终验证依据。
 - 写操作自 2026-10-24 起需要微信票据（`X-Checkin-Ticket`），由小程序签发、约 5 分钟有效，服务端不返回过期时间，只能按本地捕获时间判断时效。
-- 取票自 2026-10-26 起改为 PC 端自动完成：一次手机微信扫码得到应用宝 OAuth 凭据（`refresh_token`），由 `wx_ticket.py` 在本机复现 `js-login` 换取 code。凭据等同密码，只存本机且已加入 `.gitignore`；不保存微信账号密码，也不会代你完成扫码确认。
+- 取票自 2026-10-26 起改为 PC 端自动完成：一次手机微信扫码得到应用宝 OAuth 凭据（`refresh_token`），由 `wx_ticket.py` 在本机复现 `js-login` 换取 code。凭据以 **Windows DPAPI 加密**保存（只有本人 Windows 账户能解，换机换账户即失效），不保存微信账号密码，也不会代你完成扫码确认。
 - IDAS 表单、CAS 重定向或 JZSZ JSON 变更时，应用报告固定原因码，不把 HTTP 200 自动视为成功。
 - 打卡 POST 每个业务日最多一次；请求超时后回读当天记录，无法确认时显示「结果不确定」，不自动重发。
 - 只向 `idas.uestc.edu.cn` 与 `jzsz.uestc.edu.cn` 发起 HTTPS 请求；指纹 Cookie 只属于 IDAS 域，`SESSION` 只属于 JZSZ 域。

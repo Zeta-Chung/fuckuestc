@@ -30,3 +30,4 @@ tools/pc-relay/ledger.jsonl
 tools/pc-relay/vendor/
 tools/pc-relay/wx-credentials.json
 tools/pc-relay/wx-qr.png
+tools/pc-relay/wx-credentials.json.dpapi
