@@ -61,7 +61,7 @@ data class CheckinConfig(
             .put("errorMessage", errorMessage)
     }
 
-    fun payloadJson(now: LocalDateTime): String {
+    fun payloadJson(now: LocalDateTime, userAgentOverride: String? = null): String {
         require(validate().isEmpty()) { "配置无效" }
         return buildString {
             append("{\"latitude\":")
@@ -73,7 +73,7 @@ data class CheckinConfig(
             append(",\"clientTime\":")
             append(JSONObject.quote(now.format(CLIENT_TIME)))
             append(",\"userAgent\":")
-            append(JSONObject.quote(userAgent))
+            append(JSONObject.quote(userAgentOverride ?: userAgent))
             append(",\"coordinateSystemCode\":\"gcj02\"")
             append(",\"accuracy\":$accuracy")
             append(",\"locationDurationMs\":$locationDurationMs")

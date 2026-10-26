@@ -118,4 +118,22 @@ class CheckinRunnerTest {
         assertEquals(RunOutcome.UNCERTAIN, secondResult.outcome)
         assertEquals(0, second.submittedPaths.count { it.endsWith("/checkin") })
     }
+
+    @Test fun offlineNetworkFailureNeverPosts() {
+        val fake = Fake(mutableListOf<Any>(IOException("offline")))
+        val result = CheckinRunner(Ledger(), { fake }, clock).runOnce(config(), RunMode.SUBMIT_ONCE)
+        assertEquals(RunOutcome.FAILURE, result.outcome)
+        assertEquals("NETWORK_IO", result.reasonCode)
+        assertEquals(0, fake.submittedPaths.count { it.endsWith("/checkin") })
+    }
+
+    @Test fun outsideWindowNeverPosts() {
+        val replies = initial(today("PENDING"))
+        replies += ok("""{"code":0,"ok":true,"data":{"effective":true,"studentCheckinStartOffsetMinute":600,"studentCheckinEndOffsetMinute":700}}""")
+        val fake = Fake(replies)
+        val result = CheckinRunner(Ledger(), { fake }, clock).runOnce(config(), RunMode.SUBMIT_ONCE)
+        assertEquals(RunOutcome.FAILURE, result.outcome)
+        assertEquals("OUTSIDE_WINDOW", result.reasonCode)
+        assertEquals(0, fake.submittedPaths.count { it.endsWith("/checkin") })
+    }
 }

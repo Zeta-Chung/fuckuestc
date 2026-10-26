@@ -1,0 +1,12 @@
+{
+  "latitude": 30.674677,
+  "longitude": 104.096273,
+  "reverseGeocode": "成都市成华区一环路东一段240号",
+  "accuracy": 30,
+  "locationDurationMs": 600,
+  "networkTypeCode": "wifi",
+  "locationEnabled": true,
+  "locationAuthorized": "authorized",
+  "locationAccuracy": "high",
+  "errorMessage": ""
+}

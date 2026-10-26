@@ -14,4 +14,16 @@ Thumbs.db
 *.log
 secrets.json
 captures/
+tools/pc-relay/ticket.json
+tools/pc-relay/relay-config.json
+tools/pc-relay/proxy-backup.json
+tools/pc-relay/.mitmproxy/
+tools/pc-relay/wechat-tree.txt
+tools/pc-relay/__pycache__/
+tools/pc-relay/*.log
+tools/pc-relay/server-key.pem
+tools/pc-relay/wireguard-checkin.conf
+tools/pc-relay/wechat-ticket-baseline.json
+tools/pc-relay/submit-intent.json
+tools/pc-relay/ledger.jsonl
 .superpowers/

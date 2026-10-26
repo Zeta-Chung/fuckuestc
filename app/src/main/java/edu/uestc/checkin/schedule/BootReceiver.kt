@@ -18,5 +18,6 @@ class BootReceiver : BroadcastReceiver() {
         val recovered = try { scheduler.schedule(config, alertsRequired = false).enabled }
         catch (_: Exception) { false }
         if (!recovered) ScheduleRecovery.fail(context, "SCHEDULE_RECOVERY_FAILED")
+        else CheckinCompensation.runIfDue(context)
     }
 }

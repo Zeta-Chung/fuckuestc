@@ -1,0 +1,10 @@
+{
+  "comment": "wechat_ocr_tap.ps1 的步骤顺序。entry=true 表示「从应用中心进打卡页」的导航，若已在打卡页会自动跳过。本配置只负责「打开打卡页 → 让小程序领取新票据」，最终提交由 relay_checkin.py 用 relay-config.json 里的坐标完成，所以不点「请打卡」（PC 微信定位不可靠，页面自己提交会判超范围并浪费票据）。",
+  "steps": [
+    { "wait": 2 },
+    { "entry": true, "scroll": 15 },
+    { "entry": true, "scrollUntilText": "晚安成电", "maxScrolls": 10 },
+    { "entry": true, "text": "晚安成电", "timeoutSeconds": 20 },
+    { "wait": 8 }
+  ]
+}

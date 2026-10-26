@@ -33,9 +33,11 @@ import edu.uestc.checkin.model.CheckinConfig
 import edu.uestc.checkin.model.LocationPreset
 import edu.uestc.checkin.model.LocationPresets
 import edu.uestc.checkin.model.RunOutcome
+import edu.uestc.checkin.model.RunStep
 import edu.uestc.checkin.run.CheckinRunner
 import edu.uestc.checkin.run.PreferencesAttemptLedger
 import edu.uestc.checkin.run.RunMode
+import edu.uestc.checkin.schedule.CheckinCompensation
 import edu.uestc.checkin.schedule.DailyScheduler
 import edu.uestc.checkin.storage.RunLogStore
 import edu.uestc.checkin.storage.SecretStore
@@ -168,6 +170,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         FailureAlert.register(this)
+        Thread { CheckinCompensation.runIfDue(applicationContext) }.start()
         if (!popupShowing) {
             RunLogStore(this).latestUnacknowledgedFailure()?.let { result ->
                 displayFailure(result)
@@ -326,6 +329,20 @@ class MainActivity : Activity() {
         locationAuthorized = field(body, "locationAuthorized（可留空）", "")
         locationAccuracy = field(body, "locationAccuracy（可留空）", "")
         errorMessage = field(body, "errorMessage（可留空）", "")
+        body.addView(linkText("清除今天的提交锁（仅服务器拒绝后使用）") { confirmClearAttemptLock() }, matchWrap(top = 8))
+    }
+
+    private fun confirmClearAttemptLock() {
+        val zoneId = runCatching { ZoneId.of(zone.text.toString().trim()) }.getOrDefault(ZoneId.of("Asia/Shanghai"))
+        AlertDialog.Builder(this)
+            .setTitle("清除今天的提交锁")
+            .setMessage("只在服务器明确拒绝（POST_REJECTED）后使用。清除后今天可再次提交；若今天其实已经打卡成功，重复提交会被服务器拒绝。")
+            .setPositiveButton("清除") { _, _ ->
+                PreferencesAttemptLedger(this).clear(java.time.LocalDate.now(zoneId))
+                setStatus("已清除今天的提交锁，可以重新提交", successColor)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun buildActions(root: LinearLayout) {
@@ -375,14 +392,15 @@ class MainActivity : Activity() {
             3. 只读检查显示 NEEDS_HUMAN：按学校登录页提示完成人工验证，再重新只读检查；自动任务不会越过验证。
             4. 显示 OUTSIDE_WINDOW：当前不在学校允许时段，核对手机时间和学校页面上的时段。
             5. 显示 CONFIG_LOCATION_OUTSIDE：坐标不在允许范围，重新点“欣苑”或“校内”，或按 available-locations 重填 GCJ-02 坐标。
-            6. 显示 ALREADY_ATTEMPTED 或“结果不确定”：当天已发过提交，先查学校当天记录，不要反复点“立即打卡一次”。
-            7. 显示 POST_REJECTED：服务器拒绝请求，核对坐标、地址、User-Agent 等参数是否与学校页面一致。
+            6. 显示 ALREADY_ATTEMPTED：当天已发过提交。若上一次是服务器拒绝（POST_REJECTED），可在“高级参数”里清除今天的提交锁后再试一次；若是“结果不确定”，先查学校记录，不要反复提交。
+            7. 显示 POST_REJECTED：状态行会附带服务器返回的原因；按原因修正配置后，可在“高级参数”里清除今天的提交锁再试一次。
             8. 显示 NETWORK_IO 或 LOCATIONS_UNKNOWN：网络或接口异常，切换网络并确认能打开学校页面后重试。
             9. 收不到失败通知：允许通知权限，确认“打卡失败提醒”渠道为高重要性并关闭免打扰；Android 13 及以上允许后需再点一次开启。
             10. 定时没有按点触发：允许精确闹钟权限；系统省电策略可能导致延迟，应用会显示“近似”调度。
             11. 保存失败“设备密钥不可用”：重启手机后重试；仍失败需清除应用数据重新配置。
             12. 每晚不固定时间收到学校或微信群发的“未打卡”提醒，但应用显示成功：这类通知可能是群发或滞后发送，先到学校打卡页面核对当天记录，确认 CHECKED_IN 后即可忽略。
             13. 换手机、重装或长时间未用后提示需要人工验证：清除应用数据或卸载重装，重新点“自动获取”抓取本机指纹，保存后再做只读检查。
+            14. 手机关机或闹钟延迟错过了设定时间：开机后或再次打开应用时，若仍在 21:00–23:30 之间且当天未打卡，应用会自动补跑一次。
         """.trimIndent()
         val content = TextView(this).apply {
             text = faqText
@@ -691,6 +709,10 @@ class MainActivity : Activity() {
         syncLocationSelection()
     }
 
+    private fun stepLine(step: RunStep): String =
+        "${step.stage} · ${step.resultCode} · HTTP ${step.httpStatus ?: "—"}" +
+            (step.detail?.let { " · $it" } ?: "")
+
     private fun setStatus(message: String, color: Int = textColor) {
         status.text = message
         status.setTextColor(color)
@@ -703,11 +725,11 @@ class MainActivity : Activity() {
                 BigDecimal(latitude.text.toString().trim()), BigDecimal(longitude.text.toString().trim()),
                 address.text.toString().trim(), LocalTime.parse(time.text.toString().trim()), ZoneId.of(zone.text.toString().trim()),
                 userAgent.text.toString().trim(), accuracy.text.toString().toInt(), duration.text.toString().toLong(),
-                network.text.toString().trim(), locationEnabled.text.toString().trim().toBooleanStrict(),
+                network.text.toString().trim(), parseSwitchFlag(locationEnabled.text.toString()),
                 locationAuthorized.text.toString(), locationAccuracy.text.toString(), errorMessage.text.toString()
             )
-        } catch (_: Exception) {
-            setStatus("配置有误：请检查必填项、坐标、时间（HH:mm）和数字格式", dangerColor)
+        } catch (e: Exception) {
+            setStatus("配置有误：${e.message ?: "请检查必填项、坐标、时间（HH:mm）和数字格式"}", dangerColor)
             return null
         }
         val errors = config.validate()
@@ -716,6 +738,12 @@ class MainActivity : Activity() {
             return null
         }
         return config
+    }
+
+    private fun parseSwitchFlag(raw: String): Boolean = when (raw.trim().lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> throw IllegalArgumentException("locationEnabled 只能填 true 或 false")
     }
 
     private fun saveConfig(): Boolean {
@@ -752,14 +780,14 @@ class MainActivity : Activity() {
         Thread {
             val result = CheckinRunner(PreferencesAttemptLedger(this)).runOnce(config, mode) { step ->
                 runOnUiThread {
-                    setStatus("${step.stage} · ${step.resultCode} · HTTP ${step.httpStatus ?: "—"}", textColor)
+                    setStatus(stepLine(step), textColor)
                 }
             }
             RunLogStore(this).append(result)
             runOnUiThread {
                 val failed = result.outcome == RunOutcome.FAILURE || result.outcome == RunOutcome.UNCERTAIN
                 setStatus(
-                    result.steps.joinToString("\n") { "${it.stage} · ${it.resultCode} · HTTP ${it.httpStatus ?: "—"}" } +
+                    result.steps.joinToString("\n") { stepLine(it) } +
                         "\n最终：${result.outcome} · ${result.safeReasonCode}",
                     if (failed) dangerColor else successColor
                 )

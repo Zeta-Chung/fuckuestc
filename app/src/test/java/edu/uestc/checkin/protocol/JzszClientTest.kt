@@ -2,6 +2,7 @@ package edu.uestc.checkin.protocol
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URL
 
@@ -9,8 +10,10 @@ class JzszClientTest {
     private class Fake(private val replies: MutableList<HttpReply>) : HttpTransport {
         override val cookies = DomainCookieJar()
         val paths = mutableListOf<String>()
+        val sentHeaders = mutableListOf<Map<String, String>>()
         override fun request(method: String, url: URL, headers: Map<String, String>, body: ByteArray?): HttpReply {
             paths += url.path
+            sentHeaders += headers
             return replies.removeAt(0)
         }
     }
@@ -60,5 +63,14 @@ class JzszClientTest {
         val fake = Fake(mutableListOf(HttpReply(200, emptyMap(), "{\"code\":40001,\"ok\":false,\"msg\":\"denied\"}")))
         val result = JzszClient(fake, "agent").submit(org.json.JSONObject().put("test", true))
         assertEquals(SubmitStatus.REJECTED, result.status)
+        assertEquals("denied", result.serverMessage)
+    }
+
+    @Test fun submitSendsMiniprogramHeaders() {
+        val fake = Fake(mutableListOf(HttpReply(200, emptyMap(), "{\"code\":0,\"ok\":true}")))
+        JzszClient(fake, "agent").submit(org.json.JSONObject().put("test", true))
+        val headers = fake.sentHeaders.last()
+        assertEquals("com.tencent.mm", headers["X-Requested-With"])
+        assertTrue(headers["Referer"]!!.contains("sessionId="))
     }
 }

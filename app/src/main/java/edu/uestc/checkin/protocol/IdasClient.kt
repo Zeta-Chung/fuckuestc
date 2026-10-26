@@ -22,15 +22,26 @@ class IdasClient {
 
     fun login(config: CheckinConfig, transport: HttpTransport): LoginResult {
         transport.cookies.setHostCookie("idas.uestc.edu.cn", "MULTIFACTOR_BROWSER_FINGERPRINT", config.fingerprint)
-        val first = transport.request("GET", loginUrl, mapOf("User-Agent" to config.userAgent, "Accept" to "text/html,application/xhtml+xml"))
-        if (first.status != 200) return LoginResult.Failure("IDAS_PAGE_HTTP", first.status)
-        val execution = inputValue(first.body, "execution")
-        val salt = inputValue(first.body, "pwdEncryptSalt")
-            ?: Regex("pwdEncryptSalt[\\\"']?\\s*[:=]\\s*[\\\"']([^\\\"']+)").find(first.body)?.groupValues?.get(1)
+        var pageUrl = loginUrl
+        var page = transport.request("GET", pageUrl, mapOf("User-Agent" to config.userAgent, "Accept" to "text/html,application/xhtml+xml"))
+        var hops = 0
+        while (page.status in 300..399 && hops < 3) {
+            val location = page.header("Location") ?: return LoginResult.Failure("IDAS_REDIRECT_MISSING", page.status)
+            val next = URL(pageUrl, location)
+            if (next.protocol != "https" || next.host != "idas.uestc.edu.cn")
+                return LoginResult.Failure("IDAS_REDIRECT_HOST", page.status)
+            pageUrl = next
+            page = transport.request("GET", pageUrl, mapOf("User-Agent" to config.userAgent, "Accept" to "text/html,application/xhtml+xml"))
+            hops++
+        }
+        if (page.status != 200) return LoginResult.Failure("IDAS_PAGE_HTTP", page.status)
+        val execution = inputValue(page.body, "execution")
+        val salt = inputValue(page.body, "pwdEncryptSalt")
+            ?: Regex("pwdEncryptSalt[\\\"']?\\s*[:=]\\s*[\\\"']([^\\\"']+)").find(page.body)?.groupValues?.get(1)
         if (execution == null || salt == null) {
             // 没有登录表单才说明页面被验证码/二次验证拦截；页面正文含相关字样不算。
-            return if (looksLikeChallenge(first.body)) LoginResult.NeedsHuman
-            else LoginResult.Failure(if (execution == null) "IDAS_EXECUTION_MISSING" else "IDAS_SALT_MISSING", first.status)
+            return if (looksLikeChallenge(page.body)) LoginResult.NeedsHuman
+            else LoginResult.Failure(if (execution == null) "IDAS_EXECUTION_MISSING" else "IDAS_SALT_MISSING", page.status)
         }
         if (salt.toByteArray(Charsets.UTF_8).size != 16) return LoginResult.Failure("IDAS_SALT_INVALID")
 
@@ -45,11 +56,11 @@ class IdasClient {
             "execution" to execution
         )
         val form = fields.entries.joinToString("&") { "${encode(it.key)}=${encode(it.value)}" }.toByteArray(Charsets.UTF_8)
-        val submitted = transport.request("POST", loginUrl, mapOf(
+        val submitted = transport.request("POST", pageUrl, mapOf(
             "User-Agent" to config.userAgent,
             "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
             "Origin" to "https://idas.uestc.edu.cn",
-            "Referer" to loginUrl.toString()
+            "Referer" to pageUrl.toString()
         ), form)
         val location = submitted.header("Location")
         if (location == null || !location.contains("ticket=")) {

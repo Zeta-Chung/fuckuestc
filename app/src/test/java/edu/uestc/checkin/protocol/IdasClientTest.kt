@@ -25,6 +25,17 @@ class IdasClientTest {
         }
     }
 
+    @Test fun loginPageRedirectIsFollowed() {
+        val transport = FakeTransport(mutableListOf(
+            HttpReply(302, mapOf("Location" to listOf("/authserver/login?service=x")), ""),
+            HttpReply(200, emptyMap(), "<input name=\"execution\" value=\"e1\"><input id=\"pwdEncryptSalt\" value=\"1234567890123456\">"),
+            HttpReply(302, mapOf("Location" to listOf("https://jzsz.uestc.edu.cn/?ticket=ST-1")), ""),
+            HttpReply(200, emptyMap(), "home")
+        ))
+        assertTrue(IdasClient().login(config(), transport) is LoginResult.Failure)
+        assertEquals(4, transport.requests.size)
+    }
+
     @Test fun missingExecutionStopsLogin() {
         val transport = FakeTransport(mutableListOf(HttpReply(200, emptyMap(), "<input id=\"pwdEncryptSalt\" value=\"1234567890123456\">")))
         assertTrue(IdasClient().login(config(), transport) is LoginResult.Failure)

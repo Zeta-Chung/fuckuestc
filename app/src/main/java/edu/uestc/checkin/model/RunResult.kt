@@ -6,11 +6,22 @@ import java.time.Instant
 
 enum class RunOutcome { SUCCESS, READ_ONLY, FAILURE, UNCERTAIN }
 
-data class RunStep(val stage: String, val resultCode: String, val httpStatus: Int? = null) {
+data class RunStep(
+    val stage: String,
+    val resultCode: String,
+    val httpStatus: Int? = null,
+    val detail: String? = null
+) {
     fun toSafeJson(): JSONObject = JSONObject()
         .put("stage", stage.takeIf { it.matches(Regex("[A-Z_]{2,24}")) } ?: "PROTOCOL")
         .put("resultCode", resultCode.takeIf { it.matches(Regex("[A-Z_]{2,48}")) } ?: "DETAIL_OMITTED")
         .put("httpStatus", httpStatus ?: JSONObject.NULL)
+        .put("detail", detail?.let { sanitizeDetail(it) } ?: JSONObject.NULL)
+
+    companion object {
+        fun sanitizeDetail(text: String): String =
+            text.filter { it.isLetterOrDigit() || it in " -_.,:;()（）[]/，。：；、" }.take(60)
+    }
 }
 
 data class RunResult(
@@ -44,7 +55,8 @@ data class RunResult(
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
                     add(RunStep(item.optString("stage"), item.optString("resultCode"),
-                        if (item.isNull("httpStatus")) null else item.optInt("httpStatus")))
+                        if (item.isNull("httpStatus")) null else item.optInt("httpStatus"),
+                        item.optString("detail").takeIf { it.isNotBlank() }))
                 }
             }
         )

@@ -17,4 +17,12 @@ class PreferencesAttemptLedger(context: Context) : AttemptLedger {
         if (preferences.getBoolean(key, false)) false
         else preferences.edit().putBoolean(key, true).commit()
     }
+
+    fun attempted(day: LocalDate): Boolean = synchronized(claimLock) {
+        preferences.getBoolean(day.toString(), false)
+    }
+
+    fun clear(day: LocalDate) = synchronized(claimLock) {
+        preferences.edit().remove(day.toString()).apply()
+    }
 }

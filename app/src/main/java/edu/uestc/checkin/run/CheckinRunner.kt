@@ -76,9 +76,9 @@ class CheckinRunner(
         if (!inside) return result(RunOutcome.FAILURE, "LOCATION", "CONFIG_LOCATION_OUTSIDE", locations.httpStatus)
         if (!ledger.claim(date)) return result(RunOutcome.UNCERTAIN, "CHECKIN", "ALREADY_ATTEMPTED")
 
-        val payload = config.payloadJson(LocalDateTime.now(clock.withZone(config.zoneId)))
+        val payload = config.payloadJson(LocalDateTime.now(clock.withZone(config.zoneId)), JzszClient.effectiveSubmitUserAgent(config.userAgent))
         val submitted = try { client.submit(payload) } catch (_: IOException) { null }
-        report(RunStep("CHECKIN", submitted?.status?.name ?: "TIMEOUT", submitted?.httpStatus))
+        report(RunStep("CHECKIN", submitted?.status?.name ?: "TIMEOUT", submitted?.httpStatus, submitted?.serverMessage))
         val after = try { client.today() } catch (_: Exception) { null }
         report(RunStep("READBACK", after?.status?.name ?: "UNAVAILABLE", after?.httpStatus))
         if (after?.status == TodayStatus.CHECKED_IN) return checkedIn(after.businessDate, after.abnormal, date, after.httpStatus)
