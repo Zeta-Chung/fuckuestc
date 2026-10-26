@@ -91,6 +91,20 @@ def current_creds(wechat):
     return credentials
 
 
+def cmd_refresh() -> int:
+    from moon_uestc import WeChatClient
+
+    if not CREDS_FILE.exists():
+        log("没有微信授权凭据，先运行 --qr")
+        return 1
+    with WeChatClient() as wechat:
+        credentials = wechat.refresh(load_creds())
+    save_creds(credentials)
+    left = credentials.expires_at - int(time.time())
+    log(f"凭据已刷新并保存，剩余 {left} 秒")
+    return 0
+
+
 def cmd_status() -> int:
     if not CREDS_FILE.exists():
         log("还没有微信授权凭据，先运行 --qr 扫码")
@@ -182,6 +196,7 @@ def main() -> int:
     group.add_argument("--qr", action="store_true", help="生成二维码并等待扫码授权")
     group.add_argument("--mint", action="store_true", help="取一张新票写入 ticket.json")
     group.add_argument("--status", action="store_true", help="查看凭据状态")
+    group.add_argument("--refresh", action="store_true", help="强制刷新一次微信凭据")
     parser.add_argument("--no-open", action="store_true", help="--qr 时不自动打开图片")
     args = parser.parse_args()
 
@@ -189,6 +204,8 @@ def main() -> int:
         return cmd_qr(not args.no_open)
     if args.mint:
         return cmd_mint()
+    if args.refresh:
+        return cmd_refresh()
     return cmd_status()
 
 
