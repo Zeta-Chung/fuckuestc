@@ -10,6 +10,28 @@
 
 本机已完成配置的逐步操作见 [完整运行流程](RUNBOOK.md)。
 
+## 当前取票方式：微信 OAuth 自动换票（2026-10-26 起默认）
+
+不再打开打卡页、不再需要 mitmproxy / hosts 重定向：程序用**一次人工扫码**换来的微信授权凭据，
+在 PC 上跑 `js-login` 拿到小程序 code，再换 `X-Checkin-Ticket`。
+
+```powershell
+python wx_ticket.py --qr       # 首次/凭据失效时：生成 wx-qr.png 并等扫码（5 分钟有效）
+python wx_ticket.py --mint     # 取一张新票写入 ticket.json（nightly 会自动调用）
+python wx_ticket.py --status   # 查看凭据剩余时间
+```
+
+| 文件 | 用途 |
+| --- | --- |
+| `wx_ticket.py` | 换票主程序：扫码授权 → 刷新凭据 → 取 code → 换票 → 原子写 `ticket.json` |
+| `wx-credentials.json` | 微信授权凭据（refresh_token 等），**等同密码，已 gitignore** |
+| `vendor/site/` | `moon-uestc` 及其依赖（`httpx2`/`httpcore2`/`truststore`…），已 gitignore |
+
+- `nightly.ps1` 默认 `-TicketSource wx`：先自动换票，失败才退回旧的「人工打开打卡页」兜底。
+- 凭据过期（约 2 小时 refresh 一次；refresh_token 失效或需要重新授权时）→ `--mint` 报错，
+  当天退回兜底路径；此时重跑 `--qr` 扫一次码即可。
+- 票据只有约 5 分钟有效期，所以 nightly 是「先换票、立刻提交」，不做提前缓存。
+
 > **2026-10-24 实测结论（重要）**：微信小程序运行时（WMPF）**不走系统代理/PAC**，mitmproxy 的普通代理模式抓不到它任何请求。
 > 目前唯一验证成功的取票路线是 **hosts + 自写 TLS 反向代理**：`enable_hosts_redirect.ps1` + `mini_tls_proxy.py`，
 > 已实测跑到 `提交 HTTP 200 · code=0 · 操作成功`，复查 `CHECKED_IN`（打卡时间 2026-10-24 21:35:27）。
@@ -18,7 +40,8 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `mini_tls_proxy.py` | **取票用**：本机 443 上的极简 TLS 反向代理，用 mitmproxy CA 给 `jzsz.uestc.edu.cn` 签发带 SAN 的证书，上游固定真实 IP，顺手把票据/`sessionId`/`SESSION` Cookie 写进 `ticket.json` |
+| `wx_ticket.py` | **默认取票**：微信 OAuth 凭据 → 小程序 code → `X-Checkin-Ticket`，不打开打卡页 |
+| `mini_tls_proxy.py` | 旧取票方式：本机 443 上的极简 TLS 反向代理，用 mitmproxy CA 给 `jzsz.uestc.edu.cn` 签发带 SAN 的证书，上游固定真实 IP，顺手把票据/`sessionId`/`SESSION` Cookie 写进 `ticket.json` |
 | `enable_hosts_redirect.ps1` / `disable_hosts_redirect.ps1` | 把 `jzsz.uestc.edu.cn` 指向 `127.0.0.1`（需要管理员），用完必须还原 |
 | `ticket_saver.py` | mitmproxy 插件：命中取票响应后原子写入 `ticket.json`（普通代理模式下使用，WMPF 不走代理时无效） |
 | `relay_checkin.py` | 只读演练 / 提交 / 复查 `today`，追加 JSONL 证据到 `relay.log`（只用标准库；提交带 `?sessionId=` 与 `SESSION` Cookie） |

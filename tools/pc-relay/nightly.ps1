@@ -1,15 +1,20 @@
 <#
 每晚自动打卡编排器（PC · 免抓包版）
 
-流程：预检 → [必要时拉起微信] → 记录票据基线 → [可选] 自动打开小程序打卡页
-     → 轮询磁盘上的新票据 → relay_checkin.py 单次提交 → 复查 → 写日志/台账/提醒。
+取票来源（-TicketSource）：
+    wx（默认）  程序用微信 OAuth 凭据自行换票（wx_ticket.py --mint），不打开打卡页、不碰界面；
+                换票失败时自动退回 wechat-page 流程兜底。
+    wechat-page 旧路径：等你打开打卡页 → 读微信 Session Storage 里的新票据。
+
+流程：预检 → [必要时拉起微信] → 取票 → relay_checkin.py 单次提交 → 复查 → 写日志/台账/提醒。
 
 不再接管系统代理、不需要 hosts 重定向、不需要 mitmproxy：
 票据直接读自微信 WebView 的 Session Storage（见 wechat_ticket_store.py），
 新鲜度由「基线之后追加」证明，历史票据不会被误用。
 
 用法：
-    pwsh -File nightly.ps1                    # 记基线后等你手动打开打卡页，取到新票就提交
+    pwsh -File nightly.ps1                    # 默认：程序自行换票（微信 OAuth），零人工
+    pwsh -File nightly.ps1 -TicketSource wechat-page   # 旧路径：等你手动打开打卡页取票
     pwsh -File nightly.ps1 -AutoTap           # 自动拉起微信并点开小程序打卡页
     pwsh -File nightly.ps1 -DryRun            # 只演练：取票成功也不提交
     pwsh -File nightly.ps1 -SelfTest          # 只做离线自检，不联网、不提交
@@ -19,6 +24,8 @@
 [CmdletBinding()]
 param(
     [string]$Deadline = "23:15",
+    [ValidateSet("wx", "wechat-page")]
+    [string]$TicketSource = "wx",
     [switch]$DryRun,
     [switch]$SelfTest,
     [switch]$AutoTap,
@@ -36,6 +43,7 @@ param(
     [string]$TicketFile = (Join-Path $PSScriptRoot "ticket.json"),
     [string]$ConfigFile = (Join-Path $PSScriptRoot "relay-config.json"),
     [string]$RelayScript = (Join-Path $PSScriptRoot "relay_checkin.py"),
+    [string]$WxTicketScript = (Join-Path $PSScriptRoot "wx_ticket.py"),
     [string]$StoreScript = (Join-Path $PSScriptRoot "wechat_ticket_store.py"),
     [string]$TapScript = (Join-Path $PSScriptRoot "wechat_ocr_tap.ps1"),
     [string]$TapSteps = (Join-Path $PSScriptRoot "tap-steps.json"),
@@ -61,6 +69,8 @@ $script:ledger = [ordered]@{
     tapExit      = $null
     wechatStarted = $false
     sessionReady = $false
+    ticketSource = ""
+    mintExit     = $null
     ticketFound  = $false
     baselineDone = $false
     pollSeconds  = $null
@@ -329,6 +339,41 @@ if (-not $SkipTodayCheck) {
     }
 }
 
+# 3) 取票
+$ticketLine = $null
+$tapStarted = Get-Date
+
+# 3a) 默认路径：程序用本机微信授权凭据自行换票，不碰界面、不需要打卡页
+if ($TicketSource -eq "wx") {
+    if (-not (Test-Path $WxTicketScript)) {
+        Write-Log ("缺少取票脚本：{0}" -f $WxTicketScript)
+        $script:ledger.note = "wx-script-missing"
+        Exit-With 2
+    }
+    Write-Log "取票方式：微信 OAuth（wx_ticket.py --mint，自动换票）"
+    $mintExit = 1
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        & $pythonExe $WxTicketScript --mint 2>&1 | ForEach-Object { Write-Log $_ }
+        $mintExit = $LASTEXITCODE
+        if ($mintExit -eq 0) { break }
+        Write-Log ("自动换票失败（退出码 {0}，第 {1}/2 次）" -f $mintExit, $attempt)
+        if ($attempt -lt 2) { Start-Sleep -Seconds 5 }
+    }
+    $script:ledger.mintExit = $mintExit
+    if ($mintExit -eq 0) {
+        $record = Get-Content -Path $TicketFile -Raw | ConvertFrom-Json
+        $ticketLine = ("微信 OAuth 取票成功（票据 {0} 字符）" -f "$($record.ticket)".Length)
+        Write-Log $ticketLine
+        $script:ledger.ticketSource = "wx-oauth"
+    } else {
+        $script:ledger.ticketSource = "wx-oauth-failed"
+        Write-Log "自动换票失败，退回人工取票兜底（需要你打开打卡页）"
+        Show-Alert -Title "自动换票失败" -Text "微信 OAuth 换票失败（退出码 $mintExit）。已退回原流程：请打开「成电智慧学工」→ 打卡页并停留 3 秒，或重新扫码授权后重跑。详见 nightly.log。"
+    }
+}
+
+# 3b) 兜底/旧路径：人工打开打卡页，程序读微信存储里的新票据
+if (-not $ticketLine) {
 # 微信：能拉起就拉起（你需要用它打开打卡页）
 [void](Start-WeChatIfNeeded -Exe $WeChatExe -WaitSeconds $WeChatWaitSeconds)
 $wechatApp = @(Get-Process -Name "WeChatAppEx" -ErrorAction SilentlyContinue)
@@ -479,6 +524,12 @@ if (-not $ticketLine) {
 }
 $script:ledger.ticketFound = $true
 $script:ledger.pollSeconds = [int]((Get-Date) - $tapStarted).TotalSeconds
+} else {
+    # 微信 OAuth 已取到票：无需基线、轮询或打开打卡页
+    $script:ledger.ticketFound = $true
+    $script:ledger.pollSeconds = [int]((Get-Date) - $tapStarted).TotalSeconds
+    Write-Log ("取票耗时 {0} 秒（微信 OAuth）" -f $script:ledger.pollSeconds)
+}
 
 # 4) 单次提交（票据一次性；成败都会清空 ticket.json 里的票据）
 $relayArgs = @($RelayScript, "--ticket", $TicketFile, "--config", $ConfigFile, "--log", $RelayLog)

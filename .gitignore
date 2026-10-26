@@ -27,3 +27,6 @@ tools/pc-relay/wechat-ticket-baseline.json
 tools/pc-relay/submit-intent.json
 tools/pc-relay/ledger.jsonl
 .superpowers/
+tools/pc-relay/vendor/
+tools/pc-relay/wx-credentials.json
+tools/pc-relay/wx-qr.png
