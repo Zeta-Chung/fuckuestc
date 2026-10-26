@@ -119,6 +119,8 @@ python wx_ticket.py --seal     # 把明文凭据转成 DPAPI 加密副本
 
 | 现象 | 处理 |
 | --- | --- |
+| 火绒弹窗要求确认「PowerShell 隐藏窗口」 | 已修复：提醒弹窗改为 `alert_popup.py`（`pythonw.exe` + `MessageBoxW`），不再启动隐藏窗口的 `powershell.exe`（火绒规则 `rp_name_execcreate_powershell_hidden`）。若仍出现旧提示，确认 `nightly.ps1` 是最新版本；可在火绒信任区加入本目录做双保险 |
+| 计划任务 21:05 没跑 | 任务默认「电池不启动、睡眠不补跑」。运行 `pwsh -File fix-task-battery.ps1` 重新注册（允许电池启动 + `StartWhenAvailable` 补跑） |
 | `找不到 mitmdump` | `pip install mitmproxy` 后重开终端 |
 | 自动点击报「找不到匹配的可见窗口」 | 先启动 PC 微信并打开小程序；窗口标题不含关键词时用 `-WindowMatch` 指定 |
 | OCR 未命中文字 | `pwsh -File wechat_ocr_tap.ps1 -ListText` 看识别结果，按真实文字改 `tap-steps.json`；弹窗在内层时加 `-FullScreen` |
@@ -127,7 +129,7 @@ python wx_ticket.py --seal     # 把明文凭据转成 DPAPI 加密副本
 | `code=46001/46002/46003` | 票据失效或不匹配，重新取票；不要重复提交 |
 | `坐标不在允许范围内` | 改 `relay-config.json`，或临时加 `--force` |
 | 结束后无法上网 | 检查 `proxy-backup.json` 是否残留；重新运行一次脚本会自动恢复 |
-| 计划任务没触发 | `schtasks /Query /TN UESTC-Checkin-Relay`；确认电脑已登录且未休眠 |
+| 计划任务没触发 | `schtasks /Query /TN UESTC-Checkin-Relay`；确认电脑已登录且未休眠；电池供电或休眠错过时先跑 `fix-task-battery.ps1` |
 
 ## 合规提示
 

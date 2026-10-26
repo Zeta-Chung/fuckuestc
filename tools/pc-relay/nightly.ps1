@@ -49,6 +49,7 @@ param(
     [string]$TapSteps = (Join-Path $PSScriptRoot "tap-steps.json"),
     [string]$OpenScript = (Join-Path $PSScriptRoot "open_miniprogram.ps1"),
     [string]$AlertScript = (Join-Path $PSScriptRoot "show-alert.ps1"),
+    [string]$PopupScript = (Join-Path $PSScriptRoot "alert_popup.py"),
     [string]$ConsoleLog = (Join-Path $PSScriptRoot "nightly.log"),
     [string]$RelayConsoleLog = (Join-Path $PSScriptRoot "relay-console.log"),
     [string]$RelayLog = (Join-Path $PSScriptRoot "relay.log"),
@@ -104,21 +105,41 @@ function Exit-With {
     exit $Code
 }
 
+function Show-Popup {
+    # 独立进程弹窗：优先用 pythonw + alert_popup.py（不产生「隐藏窗口的 powershell」，
+    # 避免被火绒等安全软件按 rp_name_execcreate_powershell_hidden 拦截）；
+    # 找不到 python 时退回进程内 WinForms。
+    param([string]$Title, [string]$Text, [ValidateSet("alert", "info")][string]$Kind = "alert")
+    if ($script:pythonExe -and $script:popupScript -and (Test-Path $script:popupScript)) {
+        $pythonw = Join-Path (Split-Path -Parent $script:pythonExe) "pythonw.exe"
+        $launcher = if (Test-Path $pythonw) { $pythonw } else { $script:pythonExe }
+        try {
+            Start-Process -FilePath $launcher -WindowStyle Hidden -ArgumentList @(
+                $script:popupScript, "--title", $Title, "--text", $Text, "--kind", $Kind
+            ) | Out-Null
+            return
+        } catch {
+            Write-Log ("弹窗启动失败：{0}" -f $_.Exception.Message)
+        }
+    }
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $icon = if ($Kind -eq "alert") { "Warning" } else { "Information" }
+        [System.Windows.Forms.MessageBox]::Show(
+            $Text, $Title, [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::$icon
+        ) | Out-Null
+    } catch {
+        Write-Log ("弹窗失败（{0}）：{1}" -f $Kind, $Text)
+    }
+}
+
 function Show-Alert {
-    # 顶部置顶红色大字提醒：独立进程，便于 nightly 立刻退出而不挡人
+    # 红色大字提醒：独立进程，便于 nightly 立刻退出而不挡人
     param([string]$Title, [string]$Text)
     Write-Log ("[需要人工] {0}：{1}" -f $Title, $Text)
     if ($NoAlert) { return }   # 注意：-AutoTap 会打开 -Silent，但提醒必须照常弹，否则失败没人知道
-    if (-not (Test-Path $AlertScript)) {
-        Show-Message -Title $Title -Text $Text
-        return
-    }
-    $shell = (Get-Command pwsh -ErrorAction SilentlyContinue)
-    if (-not $shell) { $shell = (Get-Command powershell -ErrorAction SilentlyContinue) }
-    if (-not $shell) { return }
-    Start-Process -FilePath $shell.Source -WindowStyle Hidden -ArgumentList @(
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $AlertScript, "-Title", $Title, "-Text", $Text
-    ) | Out-Null
+    Show-Popup -Title $Title -Text $Text -Kind alert
 }
 
 function Get-PythonExe {
@@ -144,9 +165,7 @@ function Show-Message {
         Write-Log ("[静默] {0}：{1}" -f $Title, $Text)
         return
     }
-    $script = "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('{0}','{1}') | Out-Null" -f `
-        $Text.Replace("'", "''"), $Title.Replace("'", "''")
-    Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $script) -WindowStyle Hidden | Out-Null
+    Show-Popup -Title $Title -Text $Text -Kind info
 }
 
 function Get-IdleReport {
@@ -276,6 +295,8 @@ if (-not $pythonExe) {
     Exit-With 2
 }
 Write-Log ("python：{0}" -f $pythonExe)
+$script:pythonExe = $pythonExe
+$script:popupScript = $PopupScript
 
 foreach ($required in @($StoreScript, $RelayScript)) {
     if (-not (Test-Path $required)) {
