@@ -71,8 +71,9 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="只查询，不提交")
     parser.add_argument("--no-alert", action="store_true", help="失败也不弹窗")
     parser.add_argument("--deadline", default="23:15", help="最晚尝试到几点，默认 23:15")
-    parser.add_argument("--retry", type=int, default=3, help="取票/提交总尝试次数，默认 3")
-    parser.add_argument("--retry-gap", type=int, default=60, help="两次尝试间隔秒数，默认 60")
+    parser.add_argument("--retry", type=int, default=2, help="取票/提交总尝试次数，默认 2")
+    parser.add_argument("--retry-gap", type=int, default=300, help="两次尝试间隔秒数，默认 300")
+    parser.add_argument("--jitter-min", type=int, default=25, help="开跑前随机等待 0~N 分钟，默认 25")
     args = parser.parse_args()
 
     started = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -84,6 +85,13 @@ def main() -> int:
     }
     exit_code = EXIT_OK
     note = ""
+
+    if args.jitter_min > 0 and not args.dry_run:
+        import random
+
+        delay = random.randint(0, args.jitter_min * 60)
+        common.log(f"抖动：随机等待 {delay // 60} 分 {delay % 60} 秒再开始（降低整点特征）")
+        time.sleep(delay)
 
     try:
         config = common.load_config()

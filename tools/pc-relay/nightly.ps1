@@ -26,6 +26,7 @@ param(
     [string]$Deadline = "23:15",
     [ValidateSet("wx", "wechat-page")]
     [string]$TicketSource = "wx",
+    [int]$JitterMinutes = 25,
     [switch]$DryRun,
     [switch]$SelfTest,
     [switch]$AutoTap,
@@ -372,13 +373,19 @@ if ($TicketSource -eq "wx") {
         Exit-With 2
     }
     Write-Log "取票方式：微信 OAuth（wx_ticket.py --mint，自动换票）"
+    if ($JitterMinutes -gt 0 -and -not $DryRun) {
+        # 抖动：把固定整点打散，降低「机器定时」特征
+        $delaySeconds = Get-Random -Minimum 0 -Maximum ($JitterMinutes * 60)
+        Write-Log ("抖动：随机等待 {0} 分 {1} 秒再取票" -f [int]($delaySeconds / 60), ($delaySeconds % 60))
+        Start-Sleep -Seconds $delaySeconds
+    }
     $mintExit = 1
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         & $pythonExe $WxTicketScript --mint 2>&1 | ForEach-Object { Write-Log $_ }
         $mintExit = $LASTEXITCODE
         if ($mintExit -eq 0) { break }
         Write-Log ("自动换票失败（退出码 {0}，第 {1}/2 次）" -f $mintExit, $attempt)
-        if ($attempt -lt 2) { Start-Sleep -Seconds 5 }
+        if ($attempt -lt 2) { Start-Sleep -Seconds 300 }
     }
     $script:ledger.mintExit = $mintExit
     if ($mintExit -eq 0) {
