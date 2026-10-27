@@ -185,6 +185,19 @@ def cmd_qr(open_image: bool) -> int:
     return 3
 
 
+def get_code_refreshing(wechat, credentials):
+    """取 uni.login code；被拒（常见于 access_token 被新登录顶成 not latest）时刷新一次再试。"""
+    from moon_uestc.wechat_models import WeChatAuthorizationError
+
+    try:
+        return wechat.get_code(app_id=APP_ID, credentials=credentials), credentials
+    except WeChatAuthorizationError:
+        log("换 code 被微信拒绝（多为 access_token 已被新登录顶掉），刷新凭据后重试")
+        fresh = wechat.refresh(credentials)
+        save_creds(fresh)
+        return wechat.get_code(app_id=APP_ID, credentials=fresh), fresh
+
+
 def cmd_mint() -> int:
     from moon_uestc import MoonClient, WeChatClient
 
@@ -196,7 +209,7 @@ def cmd_mint() -> int:
         credentials = current_creds(wechat)
 
         # 第一步：用新鲜 code 登录小程序，拿到小程序侧 SESSION（不同于 H5 SESSION）
-        bind_code = wechat.get_code(app_id=APP_ID, credentials=credentials)
+        bind_code, credentials = get_code_refreshing(wechat, credentials)
         log(f"已获得绑定用 code（{len(bind_code.get_secret_value())} 字符）")
         with MoonClient() as bootstrap:
             binding = bootstrap.auth.check_wechat_bind(code=bind_code).data
@@ -208,7 +221,7 @@ def cmd_mint() -> int:
         log(f"小程序 SESSION 已获取（{len(mini_session.get_secret_value())} 字符）")
 
         # 第二步：换一张全新的 code，用小程序 SESSION 换票
-        ticket_code = wechat.get_code(app_id=APP_ID, credentials=credentials)
+        ticket_code, credentials = get_code_refreshing(wechat, credentials)
         log(f"已获得换票用 code（{len(ticket_code.get_secret_value())} 字符）")
         with MoonClient(session=mini_session) as mini_program:
             ticket = mini_program.auth.request_checkin_ticket(code=ticket_code).data.ticket

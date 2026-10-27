@@ -31,3 +31,13 @@ tools/pc-relay/vendor/
 tools/pc-relay/wx-credentials.json
 tools/pc-relay/wx-qr.png
 tools/pc-relay/wx-credentials.json.dpapi
+dist/
+tools/checkin-tool/python/
+tools/checkin-tool/vendor/
+tools/checkin-tool/__pycache__/
+tools/checkin-tool/config.json
+tools/checkin-tool/ledger.jsonl
+tools/checkin-tool/*.log
+tools/checkin-tool/wx-qr.png
+tools/checkin-tool/wx-credentials.json.dpapi
+tools/checkin-tool/task-*.xml
