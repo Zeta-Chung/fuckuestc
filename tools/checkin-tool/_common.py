@@ -23,6 +23,7 @@ DEFAULT_UA = (
 CREDS_FILE = ROOT / "wx-credentials.json.dpapi"
 CONFIG_FILE = ROOT / "config.json"
 LEDGER_FILE = ROOT / "ledger.jsonl"
+LOG_FILE = ROOT / "nightly.log"
 QR_FILE = ROOT / "wx-qr.png"
 
 
@@ -42,7 +43,14 @@ def bootstrap() -> None:
 
 
 def log(message: str) -> None:
-    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+    """同时打印和落盘：计划任务没有控制台，出问题时只能看 nightly.log。"""
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{stamp[11:]}] {message}", flush=True)
+    try:
+        with LOG_FILE.open("a", encoding="utf-8") as handle:
+            handle.write(f"{stamp} {message}\n")
+    except OSError:
+        pass
 
 
 def creds_path() -> pathlib.Path:

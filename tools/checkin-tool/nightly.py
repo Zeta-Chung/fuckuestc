@@ -47,11 +47,13 @@ def describe(record) -> str:
     return f"状态={status}，业务日期={date}，打卡时间={when}"
 
 
-def build_request(config: dict, client_time: str):
+def build_request(config: dict):
+    from datetime import datetime
+
     from moon_uestc.models import CheckinRequest
 
     return CheckinRequest(
-        client_time=client_time,
+        client_time=datetime.now(),
         latitude=config["latitude"],
         longitude=config["longitude"],
         reverse_geocode=config.get("reverseGeocode", ""),
@@ -124,7 +126,7 @@ def main() -> int:
                             ticket = client.auth.request_checkin_ticket(code=code).data
                             client.set_checkin_ticket(ticket.ticket.get_secret_value())
                             common.log(f"取票成功（第 {attempt} 次），开始提交")
-                            client.student.checkin(build_request(config, time.strftime("%Y-%m-%d %H:%M:%S")))
+                            client.student.checkin(build_request(config))
                             record["ticketSource"] = "wx-oauth"
                             problem = ""
                             break
